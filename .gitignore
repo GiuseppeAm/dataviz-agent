@@ -4,6 +4,9 @@
 # Claude Code session files
 .claude/
 
+# Internal session log
+LOG.md
+
 # Original course files
 old/
 
