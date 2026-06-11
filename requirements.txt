@@ -1,0 +1,12 @@
+anthropic
+langchain
+langchain-anthropic
+langchain-experimental
+flask
+pandas
+numpy
+matplotlib
+seaborn
+python-dotenv
+plotly
+gunicorn

@@ -1,0 +1,1373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DataViz Agent</title>
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        oklch(14% 0.007 55);
+      --s1:        oklch(18% 0.008 55);
+      --s2:        oklch(22% 0.009 55);
+      --s3:        oklch(27% 0.010 55);
+      --b1:        oklch(35% 0.013 55);
+      --b2:        oklch(46% 0.016 55);
+      --t1:        oklch(94% 0.005 55);
+      --t2:        oklch(78% 0.014 55);
+      --t3:        oklch(58% 0.013 55);
+      --accent:    oklch(74% 0.17 78);
+      --accent-10: oklch(74% 0.17 78 / 0.10);
+      --accent-20: oklch(74% 0.17 78 / 0.22);
+      --accent-fg: oklch(13% 0.05 55);
+      --blue:      oklch(67% 0.13 245);
+      --blue-10:   oklch(67% 0.13 245 / 0.12);
+      --green:     oklch(68% 0.14 145);
+      --red:       oklch(62% 0.16 25);
+      --red-10:    oklch(62% 0.16 25 / 0.12);
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--t1);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── Shell ───────────────────────────────────────────────────────── */
+    .app {
+      display: grid;
+      grid-template-columns: 256px 1fr 2fr;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    .app.chart-hidden {
+      grid-template-columns: 256px 1fr;
+    }
+
+    .app.chart-hidden .artifact-col { display: none; }
+
+    /* ── Sidebar ─────────────────────────────────────────────────────── */
+    .sidebar {
+      background: var(--s1);
+      border-right: 1px solid var(--b1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .sidebar-head {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--b1);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-icon {
+      width: 28px;
+      height: 28px;
+      background: var(--accent-10);
+      border: 1px solid var(--accent-20);
+      border-radius: 7px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .brand-text { line-height: 1.2; }
+
+    .brand-name {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--t1);
+      letter-spacing: -0.01em;
+    }
+
+    .brand-sub {
+      font-size: 10px;
+      color: var(--t3);
+      letter-spacing: 0.02em;
+    }
+
+    .sidebar-body {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 16px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--b1) transparent;
+    }
+
+    /* ── Upload zone ─────────────────────────────────────────────────── */
+    .upload-zone {
+      border: 1.5px dashed var(--b2);
+      border-radius: 10px;
+      padding: 28px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 180ms, background 180ms;
+      position: relative;
+    }
+
+    .upload-zone:hover, .upload-zone.over {
+      border-color: var(--accent);
+      background: var(--accent-10);
+    }
+
+    .upload-zone input {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+      width: 100%;
+      height: 100%;
+    }
+
+    .upload-icon { color: var(--t3); margin-bottom: 12px; transition: color 180ms; }
+    .upload-zone:hover .upload-icon, .upload-zone.over .upload-icon { color: var(--accent); }
+
+    .upload-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--t2);
+      margin-bottom: 4px;
+    }
+
+    .upload-sub { font-size: 11px; color: var(--t3); }
+
+    .upload-tag {
+      display: inline-block;
+      margin-top: 12px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.07em;
+      padding: 2px 7px;
+      border-radius: 3px;
+      background: var(--s3);
+      color: var(--t3);
+    }
+
+    /* ── Dataset panel ───────────────────────────────────────────────── */
+    #ds-panel { display: none; }
+
+    .ds-top {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .ds-file {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--t1);
+      word-break: break-all;
+      line-height: 1.3;
+    }
+
+    .btn-change {
+      background: none;
+      border: none;
+      font-size: 11px;
+      color: var(--accent);
+      cursor: pointer;
+      white-space: nowrap;
+      flex-shrink: 0;
+      padding: 0;
+      margin-top: 1px;
+    }
+
+    .btn-change:hover { text-decoration: underline; }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+      margin-bottom: 14px;
+    }
+
+    .stat {
+      background: var(--s2);
+      border: 1px solid var(--b1);
+      border-radius: 7px;
+      padding: 9px 11px;
+    }
+
+    .stat-label {
+      font-size: 10px;
+      color: var(--t3);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 3px;
+    }
+
+    .stat-val {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--t1);
+      letter-spacing: -0.03em;
+      line-height: 1;
+    }
+
+    /* insights */
+    .insights {
+      background: var(--s2);
+      border: 1px solid var(--b1);
+      border-radius: 7px;
+      padding: 10px 12px;
+      margin-bottom: 14px;
+    }
+
+    .insights-title {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--t3);
+      margin-bottom: 8px;
+    }
+
+    .insight-row {
+      display: flex;
+      gap: 8px;
+      padding: 3px 0;
+      font-size: 11.5px;
+      color: var(--t2);
+      line-height: 1.4;
+      border-bottom: 1px solid var(--b1);
+    }
+
+    .insight-row:last-child { border-bottom: none; }
+
+    .insight-dot {
+      width: 4px;
+      height: 4px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+      margin-top: 5px;
+    }
+
+    /* columns */
+    .section-head {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--t3);
+      margin-bottom: 6px;
+    }
+
+    .col-list { display: flex; flex-direction: column; gap: 1px; }
+
+    .col-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 4px 7px;
+      border-radius: 5px;
+      transition: background 150ms;
+    }
+
+    .col-row:hover { background: var(--s2); }
+
+    .col-name {
+      font-size: 11.5px;
+      color: var(--t2);
+      font-family: "SF Mono", Consolas, Menlo, monospace;
+    }
+
+    .col-badge {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      padding: 1px 5px;
+      border-radius: 3px;
+    }
+
+    .col-badge.num { background: var(--accent-10); color: var(--accent); }
+    .col-badge.cat { background: var(--blue-10);   color: var(--blue);   }
+
+    /* ── Chat column ─────────────────────────────────────────────────── */
+    .chat-col {
+      border-right: 1px solid var(--b1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    .chat-head {
+      height: 48px;
+      border-bottom: 1px solid var(--b1);
+      display: flex;
+      align-items: center;
+      padding: 0 18px;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .session-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--t3);
+      flex-shrink: 0;
+      transition: background 300ms;
+    }
+
+    .session-dot.live { background: var(--green); }
+
+    .session-label { font-size: 12px; color: var(--t2); }
+    .session-file  { font-size: 12px; font-weight: 500; color: var(--t1); font-family: "SF Mono", Consolas, Menlo, monospace; }
+
+    /* ── Messages ────────────────────────────────────────────────────── */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 18px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--b1) transparent;
+    }
+
+    /* welcome / empty */
+    .welcome {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--t3);
+    }
+
+    .welcome svg { opacity: 0.35; margin-bottom: 10px; }
+    .welcome h2 { font-size: 15px; font-weight: 600; color: var(--t2); }
+    .welcome p  { font-size: 12.5px; line-height: 1.6; max-width: 240px; }
+
+    /* suggestions */
+    .suggestions {
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      padding: 0 0 16px;
+    }
+
+    .suggestions.show { display: flex; }
+
+    .sugg {
+      font-size: 12px;
+      padding: 8px 12px;
+      border-radius: 8px;
+      background: var(--s2);
+      border: 1px solid var(--b1);
+      color: var(--t2);
+      cursor: pointer;
+      text-align: left;
+      transition: background 150ms, border-color 150ms, color 150ms;
+      line-height: 1.4;
+    }
+
+    .sugg:hover {
+      background: var(--accent-10);
+      border-color: var(--accent);
+      color: var(--t1);
+    }
+
+    /* message groups */
+    .msg-group {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-bottom: 10px;
+    }
+
+    .msg-group.user { align-items: flex-end; }
+    .msg-group.assistant { align-items: flex-start; }
+
+    .msg-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: var(--t3);
+      padding: 0 4px;
+      margin-bottom: 3px;
+    }
+
+    .bubble {
+      max-width: 92%;
+      padding: 9px 13px;
+      border-radius: 12px;
+      font-size: 13.5px;
+      line-height: 1.6;
+    }
+
+    .msg-group.user .bubble {
+      background: var(--accent);
+      color: var(--accent-fg);
+      border-bottom-right-radius: 4px;
+      font-weight: 500;
+    }
+
+    .msg-group.assistant .bubble {
+      background: var(--s2);
+      border: 1px solid var(--b1);
+      color: var(--t1);
+      border-bottom-left-radius: 4px;
+    }
+
+    /* chart reference badge */
+    .chart-ref {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 8px;
+      font-size: 11px;
+      color: var(--accent);
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 5px;
+      background: var(--accent-10);
+      border: 1px solid var(--accent-20);
+      transition: background 150ms;
+    }
+
+    .chart-ref:hover { background: var(--accent-20); }
+
+    /* code accordion */
+    .code-wrap { margin-top: 8px; max-width: 92%; }
+
+    details.code-block {
+      background: var(--s1);
+      border: 1px solid var(--b1);
+      border-radius: 7px;
+      overflow: hidden;
+    }
+
+    details.code-block + details.code-block { margin-top: 5px; }
+
+    details.code-block summary {
+      padding: 7px 11px;
+      font-size: 11px;
+      color: var(--t3);
+      cursor: pointer;
+      user-select: none;
+      list-style: none;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    details.code-block summary::-webkit-details-marker { display: none; }
+
+    details.code-block summary::before {
+      content: "";
+      width: 6px; height: 6px;
+      border-right: 1.5px solid var(--t3);
+      border-bottom: 1.5px solid var(--t3);
+      transform: rotate(-45deg);
+      transition: transform 150ms;
+      flex-shrink: 0;
+    }
+
+    details.code-block[open] summary::before { transform: rotate(45deg); }
+
+    details.code-block pre {
+      padding: 10px 12px;
+      margin: 0;
+      font-family: "SF Mono", Consolas, Menlo, monospace;
+      font-size: 11.5px;
+      line-height: 1.55;
+      color: var(--t2);
+      overflow-x: auto;
+      border-top: 1px solid var(--b1);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    /* loading */
+    .loading-bubble {
+      align-self: flex-start;
+      background: var(--s2);
+      border: 1px solid var(--b1);
+      border-radius: 12px;
+      border-bottom-left-radius: 4px;
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .ld {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--t3);
+      animation: blink 1.2s ease-in-out infinite;
+    }
+
+    .ld:nth-child(2) { animation-delay: 0.2s; }
+    .ld:nth-child(3) { animation-delay: 0.4s; }
+
+    @keyframes blink {
+      0%, 80%, 100% { opacity: 0.3; transform: scale(0.82); }
+      40%            { opacity: 1;   transform: scale(1); }
+    }
+
+    /* message entry animation */
+    .msg-group {
+      animation: fadeUp 180ms ease-out both;
+    }
+
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(6px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Input ───────────────────────────────────────────────────────── */
+    .input-area {
+      padding: 12px 18px 16px;
+      border-top: 1px solid var(--b1);
+      flex-shrink: 0;
+    }
+
+    .input-box {
+      display: flex;
+      align-items: flex-end;
+      gap: 8px;
+      background: var(--s1);
+      border: 1px solid var(--b1);
+      border-radius: 10px;
+      padding: 9px 10px;
+      transition: border-color 180ms;
+    }
+
+    .input-box:focus-within { border-color: var(--accent); }
+
+    textarea#q {
+      flex: 1;
+      background: none;
+      border: none;
+      outline: none;
+      resize: none;
+      color: var(--t1);
+      font-family: inherit;
+      font-size: 13.5px;
+      line-height: 1.5;
+      max-height: 140px;
+      overflow-y: auto;
+      padding: 0;
+      scrollbar-width: thin;
+      scrollbar-color: var(--b1) transparent;
+    }
+
+    textarea#q::placeholder { color: var(--t3); }
+    textarea#q:disabled      { opacity: 0.4; cursor: not-allowed; }
+
+    #send {
+      width: 32px; height: 32px;
+      border-radius: 7px;
+      background: var(--accent);
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      color: var(--accent-fg);
+      transition: opacity 150ms, transform 100ms;
+    }
+
+    #send:hover:not(:disabled)  { opacity: 0.85; transform: scale(1.05); }
+    #send:active:not(:disabled) { transform: scale(0.96); }
+    #send:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .input-hint {
+      font-size: 10.5px;
+      color: var(--t3);
+      margin-top: 7px;
+      padding: 0 2px;
+    }
+
+    /* ── Artifact panel ──────────────────────────────────────────────── */
+    .artifact-col {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      background: var(--bg);
+    }
+
+    .artifact-head {
+      height: 48px;
+      border-bottom: 1px solid var(--b1);
+      display: flex;
+      align-items: center;
+      padding: 0 18px;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+
+    .artifact-icon { color: var(--t3); flex-shrink: 0; }
+    .artifact-icon.live { color: var(--accent); }
+
+    .artifact-title {
+      flex: 1;
+      font-size: 12.5px;
+      font-weight: 500;
+      color: var(--t2);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .artifact-title.live { color: var(--t1); }
+
+    .artifact-actions { display: flex; gap: 4px; flex-shrink: 0; }
+
+    .icon-btn {
+      width: 30px; height: 30px;
+      border-radius: 6px;
+      background: none;
+      border: 1px solid transparent;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--t3);
+      transition: background 150ms, border-color 150ms, color 150ms;
+    }
+
+    .icon-btn:hover {
+      background: var(--s2);
+      border-color: var(--b1);
+      color: var(--t2);
+    }
+
+    .icon-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .artifact-body {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* empty / placeholder state */
+    .artifact-empty {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      text-align: center;
+      padding: 40px;
+      color: var(--t3);
+    }
+
+    .artifact-empty svg { opacity: 0.25; margin-bottom: 8px; }
+    .artifact-empty p   { font-size: 12.5px; line-height: 1.6; max-width: 240px; }
+
+    /* skeleton loader */
+    .artifact-skeleton {
+      position: absolute;
+      inset: 20px;
+      border-radius: 8px;
+      background: linear-gradient(
+        90deg,
+        var(--s2) 0%,
+        var(--s3) 50%,
+        var(--s2) 100%
+      );
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite;
+    }
+
+    @keyframes shimmer {
+      0%   { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+
+    /* plotly mount */
+    #plotly-mount {
+      position: absolute;
+      inset: 0;
+      display: none;
+    }
+
+    /* static image fallback */
+    #static-img-wrap {
+      position: absolute;
+      inset: 0;
+      display: none;
+      overflow: auto;
+      padding: 16px;
+    }
+
+    #static-img-wrap img {
+      display: block;
+      width: 100%;
+      height: auto;
+      border-radius: 6px;
+    }
+
+    /* fullscreen overlay */
+    .artifact-col.fullscreen {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      grid-column: unset;
+    }
+
+    /* ── Toast ───────────────────────────────────────────────────────── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%) translateY(60px);
+      background: var(--s3);
+      border: 1px solid var(--b2);
+      color: var(--t1);
+      font-size: 12.5px;
+      padding: 9px 16px;
+      border-radius: 8px;
+      z-index: 300;
+      transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+      pointer-events: none;
+    }
+
+    #toast.show { transform: translateX(-50%) translateY(0); }
+  </style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ── Sidebar ────────────────────────────────────────────────────── -->
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <div class="brand-icon">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+          <line x1="6"  y1="20" x2="6"  y2="14"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <div class="brand-name">DataViz Agent</div>
+        <div class="brand-sub">Powered by Claude</div>
+      </div>
+    </div>
+
+    <div class="sidebar-body">
+
+      <!-- upload -->
+      <div id="upload-panel">
+        <div class="upload-zone" id="upload-zone">
+          <input type="file" id="file-input" accept=".csv">
+          <div class="upload-icon">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <div class="upload-label">Drop a CSV file</div>
+          <div class="upload-sub">or click to browse</div>
+          <div class="upload-tag">CSV</div>
+        </div>
+      </div>
+
+      <!-- dataset info -->
+      <div id="ds-panel">
+        <div class="ds-top">
+          <div class="ds-file" id="ds-file">—</div>
+          <button class="btn-change" id="btn-change">change</button>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat">
+            <div class="stat-label">Rows</div>
+            <div class="stat-val" id="stat-rows">—</div>
+          </div>
+          <div class="stat">
+            <div class="stat-label">Cols</div>
+            <div class="stat-val" id="stat-cols">—</div>
+          </div>
+        </div>
+
+        <div class="insights">
+          <div class="insights-title">Quick Insights</div>
+          <div id="insight-list"></div>
+        </div>
+
+        <div class="section-head">Columns</div>
+        <div class="col-list" id="col-list"></div>
+      </div>
+
+    </div>
+  </aside>
+
+  <!-- ── Chat column ────────────────────────────────────────────────── -->
+  <div class="chat-col">
+    <div class="chat-head">
+      <div class="session-dot" id="session-dot"></div>
+      <span class="session-label" id="session-label">No dataset loaded</span>
+      <span class="session-file" id="session-file"></span>
+      <button class="icon-btn" id="btn-toggle-chart" title="Toggle chart panel" style="margin-left:auto;flex-shrink:0">
+        <svg id="toggle-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <line x1="15" y1="3" x2="15" y2="21"/>
+        </svg>
+      </button>
+    </div>
+
+    <div class="messages" id="messages">
+      <div class="welcome" id="welcome">
+        <svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <path d="M3 9h18M9 21V9"/>
+        </svg>
+        <h2>Upload a dataset</h2>
+        <p>Drop a CSV file in the sidebar and ask anything about your data.</p>
+      </div>
+      <div class="suggestions" id="suggestions"></div>
+    </div>
+
+    <div class="input-area">
+      <div class="input-box">
+        <textarea id="q" rows="1" placeholder="Ask anything about your data..." disabled></textarea>
+        <button id="send" disabled aria-label="Send">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="19" x2="12" y2="5"/>
+            <polyline points="5 12 12 5 19 12"/>
+          </svg>
+        </button>
+      </div>
+      <div class="input-hint" id="input-hint">Upload a CSV file to get started</div>
+    </div>
+  </div>
+
+  <!-- ── Artifact panel ─────────────────────────────────────────────── -->
+  <div class="artifact-col" id="artifact-col">
+    <div class="artifact-head">
+      <div class="artifact-icon" id="artifact-icon">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <polyline points="3 9 9 9 9 15 3 15"/>
+          <polyline points="9 9 15 9 15 3"/>
+          <line x1="15" y1="9" x2="21" y2="9"/>
+          <line x1="9" y1="15" x2="9" y2="21"/>
+        </svg>
+      </div>
+      <div class="artifact-title" id="artifact-title">Chart</div>
+      <div class="artifact-actions">
+        <button class="icon-btn" id="btn-download" title="Download PNG" disabled>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+        </button>
+        <button class="icon-btn" id="btn-fullscreen" title="Fullscreen" disabled>
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="fs-icon">
+            <polyline points="15 3 21 3 21 9"/>
+            <polyline points="9 21 3 21 3 15"/>
+            <line x1="21" y1="3" x2="14" y2="10"/>
+            <line x1="3" y1="21" x2="10" y2="14"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="artifact-body" id="artifact-body">
+      <div class="artifact-empty" id="artifact-empty">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+          <line x1="6"  y1="20" x2="6"  y2="14"/>
+        </svg>
+        <p id="artifact-hint">Upload a dataset, then ask a visualization question to see an interactive chart here.</p>
+      </div>
+      <div class="artifact-skeleton" id="artifact-skeleton" style="display:none"></div>
+      <div id="plotly-mount"></div>
+      <div id="static-img-wrap"><img id="static-img" src="" alt="Chart"></div>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+  /* ── DOM refs ──────────────────────────────────────────────────────── */
+  const uploadPanel   = document.getElementById('upload-panel');
+  const dsPanel       = document.getElementById('ds-panel');
+  const uploadZone    = document.getElementById('upload-zone');
+  const fileInput     = document.getElementById('file-input');
+  const btnChange     = document.getElementById('btn-change');
+
+  const sessionDot    = document.getElementById('session-dot');
+  const sessionLabel  = document.getElementById('session-label');
+  const sessionFile   = document.getElementById('session-file');
+
+  const messages      = document.getElementById('messages');
+  const welcome       = document.getElementById('welcome');
+  const suggestions   = document.getElementById('suggestions');
+
+  const qInput        = document.getElementById('q');
+  const sendBtn       = document.getElementById('send');
+  const inputHint     = document.getElementById('input-hint');
+
+  const artifactIcon  = document.getElementById('artifact-icon');
+  const artifactTitle = document.getElementById('artifact-title');
+  const artifactEmpty = document.getElementById('artifact-empty');
+  const artifactHint  = document.getElementById('artifact-hint');
+  const artifactSkel  = document.getElementById('artifact-skeleton');
+  const plotlyMount   = document.getElementById('plotly-mount');
+  const staticWrap    = document.getElementById('static-img-wrap');
+  const staticImg     = document.getElementById('static-img');
+  const btnDownload   = document.getElementById('btn-download');
+  const btnFullscreen = document.getElementById('btn-fullscreen');
+  const artifactCol   = document.getElementById('artifact-col');
+
+  const toast         = document.getElementById('toast');
+
+  /* ── State ─────────────────────────────────────────────────────────── */
+  let sessionId     = null;
+  let isLoading     = false;
+  let currentPlotly = null;   // plotly div element
+  let chartHistory  = [];     // list of {json, b64, title}
+
+  /* ── Toast ─────────────────────────────────────────────────────────── */
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    setTimeout(() => toast.classList.remove('show'), 3200);
+  }
+
+  /* ── Upload ─────────────────────────────────────────────────────────── */
+  uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('over'); });
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('over'));
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadZone.classList.remove('over');
+    const f = e.dataTransfer.files[0];
+    if (f) handleFile(f);
+  });
+  fileInput.addEventListener('change', () => { if (fileInput.files[0]) handleFile(fileInput.files[0]); });
+  btnChange.addEventListener('click', resetSession);
+
+  async function handleFile(file) {
+    if (!file.name.toLowerCase().endsWith('.csv')) { showToast('Only CSV files are supported'); return; }
+    uploadZone.classList.add('over');
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res  = await fetch('/upload', { method: 'POST', body: fd });
+      const data = await res.json();
+      uploadZone.classList.remove('over');
+      if (!res.ok) { showToast(data.error || 'Upload failed'); return; }
+      sessionId = data.session_id;
+      onDatasetLoaded(data);
+    } catch {
+      uploadZone.classList.remove('over');
+      showToast('Connection error — is the server running?');
+    }
+  }
+
+  function onDatasetLoaded(data) {
+    uploadPanel.style.display = 'none';
+    dsPanel.style.display     = 'block';
+
+    document.getElementById('ds-file').textContent  = data.filename || 'dataset.csv';
+    document.getElementById('stat-rows').textContent = data.rows.toLocaleString();
+    document.getElementById('stat-cols').textContent = data.cols;
+
+    sessionDot.classList.add('live');
+    sessionLabel.textContent = 'Analyzing';
+    sessionFile.textContent  = data.filename || 'dataset.csv';
+
+    // insights
+    const insightList = document.getElementById('insight-list');
+    insightList.innerHTML = '';
+    buildInsights(data).forEach(txt => {
+      const row = document.createElement('div');
+      row.className = 'insight-row';
+      row.innerHTML = `<span class="insight-dot"></span><span>${txt}</span>`;
+      insightList.appendChild(row);
+    });
+
+    // columns
+    const colList = document.getElementById('col-list');
+    colList.innerHTML = '';
+    [...data.numeric.map(c => [c,'num']), ...data.categorical.map(c => [c,'cat'])].forEach(([col, type]) => {
+      const el = document.createElement('div');
+      el.className = 'col-row';
+      el.innerHTML = `<span class="col-name">${col}</span><span class="col-badge ${type}">${type === 'num' ? 'NUM' : 'CAT'}</span>`;
+      colList.appendChild(el);
+    });
+
+    // enable chat
+    qInput.disabled  = false;
+    sendBtn.disabled = false;
+    inputHint.textContent = 'Enter to send  ·  Shift+Enter for new line';
+
+    // artifact hint update
+    artifactHint.textContent = 'Ask a visualization question to generate an interactive chart.';
+
+    // welcome → suggestions
+    welcome.style.display = 'none';
+    suggestions.innerHTML = '';
+    buildSuggestions(data).forEach(txt => {
+      const btn = document.createElement('button');
+      btn.className = 'sugg';
+      btn.textContent = txt;
+      btn.addEventListener('click', () => { qInput.value = txt; autoResize(); sendMessage(); });
+      suggestions.appendChild(btn);
+    });
+    suggestions.classList.add('show');
+
+    qInput.focus();
+  }
+
+  function buildInsights(data) {
+    const items = [];
+    const numN = data.numeric.length, catN = data.categorical.length;
+    items.push(`${numN} numeric, ${catN} categorical column${catN !== 1 ? 's' : ''}`);
+
+    const nullKeys = Object.keys(data.nulls || {});
+    if (nullKeys.length > 0) {
+      const preview = nullKeys.slice(0,3).join(', ');
+      const extra   = nullKeys.length > 3 ? ` +${nullKeys.length - 3} more` : '';
+      items.push(`Missing values in: ${preview}${extra}`);
+    } else {
+      items.push('No missing values');
+    }
+
+    if (data.top_corr) {
+      items.push(`Strongest correlation: ${data.top_corr.cols[0]} ↔ ${data.top_corr.cols[1]} (r = ${data.top_corr.r})`);
+    }
+
+    if (data.num_stats) {
+      const entries = Object.entries(data.num_stats);
+      if (entries.length > 0) {
+        const [col, s] = entries[0];
+        items.push(`${col}: mean ${s.mean}, range ${s.min}–${s.max}`);
+      }
+    }
+    return items;
+  }
+
+  function buildSuggestions(data) {
+    const s = [];
+    s.push('Give me a statistical overview of this dataset');
+    if (data.numeric.length >= 1) s.push(`Plot the distribution of ${data.numeric[0]}`);
+    if (data.top_corr) s.push(`Explore the relationship between ${data.top_corr.cols[0]} and ${data.top_corr.cols[1]}`);
+    if (data.categorical.length >= 1 && data.numeric.length >= 1)
+      s.push(`Show average ${data.numeric[data.numeric.length - 1]} grouped by ${data.categorical[0]}`);
+    return s.slice(0, 4);
+  }
+
+  function resetSession() {
+    sessionId = null;
+    currentPlotly = null;
+    chartHistory  = [];
+
+    uploadPanel.style.display = 'block';
+    dsPanel.style.display     = 'none';
+
+    sessionDot.classList.remove('live');
+    sessionLabel.textContent = 'No dataset loaded';
+    sessionFile.textContent  = '';
+
+    qInput.disabled  = true;
+    sendBtn.disabled = true;
+    inputHint.textContent = 'Upload a CSV file to get started';
+    qInput.value = '';
+    autoResize();
+
+    messages.innerHTML = '';
+    messages.appendChild(welcome);
+    welcome.style.display = '';
+    suggestions.innerHTML = '';
+    suggestions.classList.remove('show');
+    messages.appendChild(suggestions);
+
+    clearArtifact();
+    artifactHint.textContent = 'Upload a dataset, then ask a visualization question to see an interactive chart here.';
+    fileInput.value = '';
+  }
+
+  /* ── Chat ───────────────────────────────────────────────────────────── */
+  async function sendMessage() {
+    const question = qInput.value.trim();
+    if (!question || !sessionId || isLoading) return;
+
+    isLoading = true;
+    qInput.value = '';
+    autoResize();
+    sendBtn.disabled = true;
+    suggestions.classList.remove('show');
+
+    appendUserMsg(question);
+    const loader = appendLoading();
+    showArtifactSkeleton();
+
+    try {
+      const res  = await fetch('/query', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ session_id: sessionId, question }),
+      });
+      const data = await res.json();
+      loader.remove();
+
+      if (!res.ok) {
+        showToast(data.error || 'Query failed');
+        clearArtifactSkeleton();
+      } else {
+        const hasChart = !!(data.chart_json || data.chart_b64);
+        appendAssistantMsg(data.answer, hasChart, data.code);
+        if (hasChart) {
+          renderChart(data.chart_json, data.chart_b64);
+        } else {
+          clearArtifactSkeleton();
+        }
+      }
+    } catch {
+      loader.remove();
+      clearArtifactSkeleton();
+      showToast('Connection error');
+    }
+
+    isLoading = false;
+    sendBtn.disabled = false;
+    qInput.focus();
+  }
+
+  function appendUserMsg(text) {
+    const g = document.createElement('div');
+    g.className = 'msg-group user';
+    g.innerHTML = `<div class="msg-label">You</div><div class="bubble">${escHtml(text)}</div>`;
+    messages.appendChild(g);
+    scrollChat();
+  }
+
+  function appendAssistantMsg(text, hasChart, codeSteps) {
+    const g = document.createElement('div');
+    g.className = 'msg-group assistant';
+
+    let html = `<div class="msg-label">Agent</div><div class="bubble">${escHtml(text)}`;
+
+    if (hasChart) {
+      html += `<div class="chart-ref" onclick="scrollToArtifact()">
+        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+        </svg>
+        Chart generated
+      </div>`;
+    }
+
+    html += `</div>`;
+
+    if (codeSteps && codeSteps.length > 0) {
+      html += `<div class="code-wrap">`;
+      codeSteps.forEach((code, i) => {
+        const label = codeSteps.length > 1 ? `Generated code (step ${i+1})` : 'Generated code';
+        html += `<details class="code-block"><summary>${label}</summary><pre>${escHtml(code)}</pre></details>`;
+      });
+      html += `</div>`;
+    }
+
+    g.innerHTML = html;
+    messages.appendChild(g);
+    scrollChat();
+  }
+
+  function appendLoading() {
+    const el = document.createElement('div');
+    el.className = 'loading-bubble';
+    el.innerHTML = '<div class="ld"></div><div class="ld"></div><div class="ld"></div>';
+    messages.appendChild(el);
+    scrollChat();
+    return el;
+  }
+
+  function scrollChat() {
+    messages.scrollTop = messages.scrollHeight;
+  }
+
+  function scrollToArtifact() {
+    // brief highlight pulse on artifact panel
+    artifactCol.style.transition = 'box-shadow 150ms';
+    artifactCol.style.boxShadow  = `inset 0 0 0 2px var(--accent)`;
+    setTimeout(() => { artifactCol.style.boxShadow = ''; }, 600);
+  }
+
+  /* ── Artifact rendering ─────────────────────────────────────────────── */
+  function showArtifactSkeleton() {
+    artifactEmpty.style.display = 'none';
+    plotlyMount.style.display   = 'none';
+    staticWrap.style.display    = 'none';
+    artifactSkel.style.display  = 'block';
+  }
+
+  function clearArtifactSkeleton() {
+    artifactSkel.style.display  = 'none';
+    if (!currentPlotly && !staticImg.src.startsWith('data:')) {
+      artifactEmpty.style.display = 'flex';
+    }
+  }
+
+  function clearArtifact() {
+    artifactSkel.style.display  = 'none';
+    plotlyMount.style.display   = 'none';
+    staticWrap.style.display    = 'none';
+    artifactEmpty.style.display = 'flex';
+    if (currentPlotly) { Plotly.purge(currentPlotly); currentPlotly = null; }
+    plotlyMount.innerHTML = '';
+    staticImg.src = '';
+    artifactTitle.textContent = 'Chart';
+    artifactTitle.classList.remove('live');
+    artifactIcon.classList.remove('live');
+    btnDownload.disabled  = true;
+    btnFullscreen.disabled = true;
+  }
+
+  function renderChart(chartJson, chartB64) {
+    artifactSkel.style.display = 'none';
+
+    if (chartJson) {
+      // Interactive Plotly chart
+      plotlyMount.innerHTML = '';
+      staticWrap.style.display = 'none';
+
+      const fig    = JSON.parse(chartJson);
+      const plotDiv = document.createElement('div');
+      plotDiv.style.cssText = 'position:absolute;inset:0;';
+      plotlyMount.appendChild(plotDiv);
+      plotlyMount.style.display = 'block';
+      artifactEmpty.style.display = 'none';
+
+      Plotly.newPlot(plotDiv, fig.data, fig.layout, {
+        responsive:    true,
+        displaylogo:   false,
+        modeBarButtonsToRemove: ['sendDataToCloud', 'lasso2d', 'select2d', 'autoScale2d'],
+        toImageButtonOptions: { format: 'png', scale: 2, filename: 'chart' },
+      });
+
+      currentPlotly = plotDiv;
+
+      // extract title
+      const t = fig.layout && fig.layout.title;
+      const titleText = t ? (typeof t === 'string' ? t : t.text || 'Chart') : 'Chart';
+      artifactTitle.textContent = titleText;
+      artifactTitle.classList.add('live');
+      artifactIcon.classList.add('live');
+      btnDownload.disabled  = false;
+      btnFullscreen.disabled = false;
+
+      window.dispatchEvent(new Event('resize'));
+
+    } else if (chartB64) {
+      // Static fallback
+      if (currentPlotly) { Plotly.purge(currentPlotly); currentPlotly = null; }
+      plotlyMount.style.display  = 'none';
+      staticImg.src = `data:image/png;base64,${chartB64}`;
+      staticWrap.style.display   = 'block';
+      artifactEmpty.style.display = 'none';
+
+      artifactTitle.textContent = 'Chart';
+      artifactTitle.classList.add('live');
+      artifactIcon.classList.add('live');
+      btnDownload.disabled  = false;
+      btnFullscreen.disabled = false;
+    }
+  }
+
+  /* ── Artifact actions ───────────────────────────────────────────────── */
+  btnDownload.addEventListener('click', () => {
+    if (currentPlotly) {
+      Plotly.downloadImage(currentPlotly, { format: 'png', scale: 2, filename: 'chart' });
+    } else if (staticImg.src.startsWith('data:')) {
+      const a = document.createElement('a');
+      a.href = staticImg.src;
+      a.download = 'chart.png';
+      a.click();
+    }
+  });
+
+  const fsIconPaths = {
+    expand:   '<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>',
+    compress: '<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="10" y1="14" x2="3" y2="21"/><line x1="21" y1="3" x2="14" y2="10"/>',
+  };
+
+  btnFullscreen.addEventListener('click', () => {
+    const isFs = artifactCol.classList.toggle('fullscreen');
+    document.getElementById('fs-icon').innerHTML = isFs ? fsIconPaths.compress : fsIconPaths.expand;
+    if (currentPlotly) setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+  });
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && artifactCol.classList.contains('fullscreen')) {
+      artifactCol.classList.remove('fullscreen');
+      document.getElementById('fs-icon').innerHTML = fsIconPaths.expand;
+      if (currentPlotly) setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+    }
+  });
+
+  /* ── Input ──────────────────────────────────────────────────────────── */
+  function autoResize() {
+    qInput.style.height = 'auto';
+    qInput.style.height = Math.min(qInput.scrollHeight, 140) + 'px';
+  }
+
+  qInput.addEventListener('input', autoResize);
+  qInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  });
+  sendBtn.addEventListener('click', sendMessage);
+
+  /* ── Chart panel toggle ─────────────────────────────────────────────── */
+  const appEl       = document.querySelector('.app');
+  const btnToggle   = document.getElementById('btn-toggle-chart');
+  const toggleIcon  = document.getElementById('toggle-icon');
+
+  const iconShow = `<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="15" y1="3" x2="15" y2="21"/>`;
+  const iconHide = `<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/>`;
+
+  btnToggle.addEventListener('click', () => {
+    const hidden = appEl.classList.toggle('chart-hidden');
+    toggleIcon.innerHTML = hidden ? iconHide : iconShow;
+    btnToggle.title = hidden ? 'Show chart panel' : 'Hide chart panel';
+    if (!hidden && currentPlotly) {
+      setTimeout(() => window.dispatchEvent(new Event('resize')), 50);
+    }
+  });
+
+  /* ── Helpers ────────────────────────────────────────────────────────── */
+  function escHtml(str) {
+    return str
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;')
+      .replace(/\n/g,'<br>');
+  }
+</script>
+
+</body>
+</html>
