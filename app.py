@@ -1,3 +1,4 @@
+import io
 import os
 import uuid
 
@@ -16,6 +17,45 @@ app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50 MB
 _sessions: dict = {}
 
 
+def _read_csv(file_storage) -> pd.DataFrame:
+    """Parse an uploaded CSV robustly: handles BOM, latin-1 encoding, and
+    semicolon/tab delimiters common in non-US exports. Raises ValueError with
+    a user-facing message on failure."""
+    raw = file_storage.read()
+    if not raw:
+        raise ValueError("The file is empty.")
+
+    text = None
+    for encoding in ("utf-8-sig", "latin-1"):
+        try:
+            text = raw.decode(encoding)
+            break
+        except UnicodeDecodeError:
+            continue
+    if text is None:
+        raise ValueError("Could not read the file's text. Please save it as UTF-8 CSV.")
+
+    sample = text[:8192]
+    delimiter = ","
+    if sample.count(";") > sample.count(","):
+        delimiter = ";"
+    elif sample.count("\t") > sample.count(","):
+        delimiter = "\t"
+
+    try:
+        df = pd.read_csv(io.StringIO(text), sep=delimiter)
+    except pd.errors.EmptyDataError:
+        raise ValueError("The file has no columns to parse.")
+    except pd.errors.ParserError as exc:
+        raise ValueError(f"The CSV is malformed and could not be parsed: {exc}")
+
+    if df.shape[1] == 0:
+        raise ValueError("No columns were detected. Check the file's delimiter.")
+    if df.empty:
+        raise ValueError("The file has headers but no data rows.")
+    return df
+
+
 @app.route("/")
 def index():
     return render_template("index.html")
@@ -24,22 +64,28 @@ def index():
 @app.route("/upload", methods=["POST"])
 def upload():
     if "file" not in request.files:
-        return jsonify({"error": "No file provided"}), 400
+        return jsonify({"error": "No file was attached to the request."}), 400
 
     f = request.files["file"]
+    if not f.filename:
+        return jsonify({"error": "No file was selected."}), 400
     if not f.filename.lower().endswith(".csv"):
-        return jsonify({"error": "Only CSV files are supported"}), 400
+        return jsonify({"error": "Only .csv files are supported."}), 400
 
     try:
-        df = pd.read_csv(f)
+        df = _read_csv(f)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
     except Exception as exc:
-        return jsonify({"error": f"Could not parse CSV: {exc}"}), 400
+        return jsonify({"error": f"Could not read the CSV: {exc}"}), 400
 
-    if df.empty:
-        return jsonify({"error": "The CSV file is empty"}), 400
+    try:
+        agent = build_agent(df)
+    except Exception as exc:
+        return jsonify({"error": f"Could not initialize the analysis agent: {exc}"}), 500
 
     session_id = str(uuid.uuid4())
-    _sessions[session_id] = {"agent": build_agent(df)}
+    _sessions[session_id] = {"agent": agent}
 
     analysis = auto_analyze(df)
     return jsonify({"session_id": session_id, "filename": f.filename, **analysis})

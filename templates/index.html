@@ -977,17 +977,28 @@
     uploadZone.classList.add('over');
     const fd = new FormData();
     fd.append('file', file);
+    let res;
     try {
-      const res  = await fetch('/upload', { method: 'POST', body: fd });
-      const data = await res.json();
-      uploadZone.classList.remove('over');
-      if (!res.ok) { showToast(data.error || 'Upload failed'); return; }
-      sessionId = data.session_id;
-      onDatasetLoaded(data);
+      res = await fetch('/upload', { method: 'POST', body: fd });
     } catch {
       uploadZone.classList.remove('over');
-      showToast('Connection error — is the server running?');
+      showToast('Could not reach the server. Check your connection and that the app is running.');
+      return;
     }
+    uploadZone.classList.remove('over');
+
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      showToast(`The server returned an unreadable response (HTTP ${res.status}).`);
+      return;
+    }
+
+    if (!res.ok) { showToast(data.error || `Upload failed (HTTP ${res.status}).`); return; }
+
+    sessionId = data.session_id;
+    onDatasetLoaded(data);
   }
 
   function onDatasetLoaded(data) {
@@ -1128,31 +1139,43 @@
     const loader = appendLoading();
     showArtifactSkeleton();
 
+    let res;
     try {
-      const res  = await fetch('/query', {
+      res = await fetch('/query', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ session_id: sessionId, question }),
       });
-      const data = await res.json();
-      loader.remove();
-
-      if (!res.ok) {
-        showToast(data.error || 'Query failed');
-        clearArtifactSkeleton();
-      } else {
-        const hasChart = !!(data.chart_json || data.chart_b64);
-        appendAssistantMsg(data.answer, hasChart, data.code);
-        if (hasChart) {
-          renderChart(data.chart_json, data.chart_b64);
-        } else {
-          clearArtifactSkeleton();
-        }
-      }
     } catch {
       loader.remove();
       clearArtifactSkeleton();
-      showToast('Connection error');
+      showToast('Could not reach the server. Check your connection and that the app is running.');
+      isLoading = false; sendBtn.disabled = false; qInput.focus();
+      return;
+    }
+    loader.remove();
+
+    let data;
+    try {
+      data = await res.json();
+    } catch {
+      clearArtifactSkeleton();
+      showToast(`The server returned an unreadable response (HTTP ${res.status}).`);
+      isLoading = false; sendBtn.disabled = false; qInput.focus();
+      return;
+    }
+
+    if (!res.ok) {
+      showToast(data.error || `Query failed (HTTP ${res.status}).`);
+      clearArtifactSkeleton();
+    } else {
+      const hasChart = !!(data.chart_json || data.chart_b64);
+      appendAssistantMsg(data.answer, hasChart, data.code);
+      if (hasChart) {
+        renderChart(data.chart_json, data.chart_b64);
+      } else {
+        clearArtifactSkeleton();
+      }
     }
 
     isLoading = false;
