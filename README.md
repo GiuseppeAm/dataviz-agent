@@ -70,7 +70,9 @@ On Windows you can also double-click `start.bat`.
 ├── requirements.txt
 ├── Procfile             # For Railway / Render deployment
 ├── start.bat            # Windows launcher
-├── student-mat.csv      # Sample dataset (UCI Student Alcohol Consumption)
+├── datasets/
+│   ├── student-mat.csv  # UCI Student Alcohol Consumption
+│   └── titanic.csv      # Titanic passenger data
 ├── ARCHITECTURE.md      # Detailed technical documentation
 └── LOG.md               # Session log and roadmap
 ```
@@ -81,16 +83,27 @@ On Windows you can also double-click `start.bat`.
 
 1. Push to GitHub
 2. Go to [railway.app](https://railway.app) → New Project → Deploy from GitHub repo
-3. Add environment variable: `ANTHROPIC_API_KEY`
-4. Railway detects `Procfile` automatically — deploy is live in ~2 minutes
+3. Select the repository — if no repos appear, click "Configure GitHub App" and grant access
+4. Add environment variable: `ANTHROPIC_API_KEY`
+5. Railway detects `Procfile` automatically and runs `gunicorn app:app`
+6. Go to **Settings → Networking → Generate Domain** to get a public URL
 
 ---
 
-## Sample dataset
+## Sample datasets
 
-`student-mat.csv` is the [UCI Student Alcohol Consumption](https://www.kaggle.com/datasets/uciml/student-alcohol-consumption) dataset (395 students, 33 columns). Try questions like:
+Two CSV files are included in `datasets/` to get started immediately.
+
+**`student-mat.csv`** — [UCI Student Alcohol Consumption](https://www.kaggle.com/datasets/uciml/student-alcohol-consumption) (395 students, 33 columns)
 
 - *"Plot the distribution of final grades (G3)"*
 - *"Show average G3 grouped by mother's education level"*
 - *"What is the correlation between study time and final grade?"*
 - *"Generate scatter plots of daily and weekend alcohol consumption vs G3"*
+
+**`titanic.csv`** — Titanic passenger data (891 rows, 12 columns)
+
+- *"What was the overall survival rate?"*
+- *"Show survival rate by passenger class"*
+- *"Plot the age distribution of survivors vs non-survivors"*
+- *"How did fare correlate with survival?"*
