@@ -123,8 +123,14 @@ When creating visualizations:
 11. After generating a chart, write one sentence describing the most important \
     visual pattern.
 
+BREVITY — this matters as much as the rules above:
+- Be concise. The Final Answer must be 2-4 sentences of plain prose. No preamble,
+  no restating the question, no "let me analyze...", no bullet lists.
+- Lead with the answer and the key number. Add at most one supporting detail.
+- Take the most direct path: avoid exploratory steps that don't change the answer.
+
 RESPONSE FORMAT: End every response with exactly:
-Final Answer: <your analysis in plain prose — no markdown tables, no # headers>
+Final Answer: <2-4 sentences, plain prose — no markdown tables, no # headers>
 """
 
 
@@ -141,6 +147,8 @@ def build_agent(df: pd.DataFrame):
         ),
         allow_dangerous_code=True,
         prefix=ANALYST_PREFIX,
+        max_iterations=10,
+        max_execution_time=100,
     )
 
 
