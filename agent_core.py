@@ -1,4 +1,5 @@
 import io
+import math
 import base64
 import warnings
 
@@ -205,6 +206,17 @@ def run_query(agent, question: str) -> dict:
     }
 
 
+def _json_safe(obj):
+    """Recursively replace NaN with None so the result serialises to valid JSON."""
+    if isinstance(obj, float) and math.isnan(obj):
+        return None
+    if isinstance(obj, dict):
+        return {k: _json_safe(v) for k, v in obj.items()}
+    if isinstance(obj, list):
+        return [_json_safe(v) for v in obj]
+    return obj
+
+
 def auto_analyze(df: pd.DataFrame) -> dict:
     num_cols = df.select_dtypes(include="number").columns.tolist()
     cat_cols = df.select_dtypes(exclude="number").columns.tolist()
@@ -235,7 +247,7 @@ def auto_analyze(df: pd.DataFrame) -> dict:
                 "max":  float(desc.loc["max",  col]),
             }
 
-    return {
+    return _json_safe({
         "rows":        len(df),
         "cols":        len(df.columns),
         "numeric":     num_cols,
@@ -244,4 +256,4 @@ def auto_analyze(df: pd.DataFrame) -> dict:
         "top_corr":    top_corr,
         "num_stats":   num_stats,
         "preview":     df.head(5).to_dict(orient="records"),
-    }
+    })
