@@ -124,6 +124,12 @@ When creating visualizations:
 10. Always label axes: fig.update_layout(xaxis_title="...", yaxis_title="...")
 11. After generating a chart, write one sentence describing the most important \
     visual pattern.
+12. For multi-panel charts (make_subplots): ALWAYS set height and spacing to \
+    prevent overlapping titles and labels. Use: \
+    make_subplots(rows=R, cols=C, subplot_titles=[...], \
+    vertical_spacing=0.15, horizontal_spacing=0.12) \
+    and fig.update_layout(height=300*R, margin=dict(t=80, b=60, l=60, r=40)). \
+    Never use height below 300px per row.
 
 BREVITY — this matters as much as the rules above:
 - Be concise. The Final Answer must be 2-4 sentences of plain prose. No preamble,
@@ -150,7 +156,7 @@ def build_agent(df: pd.DataFrame):
         allow_dangerous_code=True,
         prefix=ANALYST_PREFIX,
         max_iterations=10,
-        max_execution_time=100,
+        max_execution_time=160,
     )
 
 
