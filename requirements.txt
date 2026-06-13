@@ -10,3 +10,4 @@ seaborn
 python-dotenv
 plotly
 gunicorn
+tabulate
